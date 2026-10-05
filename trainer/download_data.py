@@ -10,6 +10,7 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # O download acontece somente quando este script é executado explicitamente.
+    # Uso candles diários ajustados para manter uma coluna de fechamento simples.
     history = yf.download(
         "BTC-USD",
         period="5y",
@@ -25,6 +26,7 @@ def main() -> None:
     if getattr(close, "ndim", 1) == 2:
         close = close.iloc[:, 0]
     output = close.rename("Close").rename_axis("Date").reset_index()
+    # O restante do projeto usa o CSV local e não consulta a internet de novo.
     output.to_csv(output_path, index=False, date_format="%Y-%m-%d")
     print(f"CSV salvo em {output_path} ({len(output)} observações diárias).")
 

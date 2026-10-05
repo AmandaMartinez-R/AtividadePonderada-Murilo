@@ -11,7 +11,9 @@ def get_json(url: str) -> dict:
 
 
 def main() -> None:
+    # Por padrão o cliente chama a API publicada na porta 8000 da máquina.
     base_url = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
+    # Primeiro confiro a saúde do serviço; depois peço a previsão.
     health = get_json(f"{base_url}/health")
     print("Health:", json.dumps(health, ensure_ascii=False))
     prediction = get_json(f"{base_url}/predict/latest")

@@ -23,6 +23,7 @@ async def lifespan(_: FastAPI):
     global model_bundle
     if not MODEL_PATH.is_file():
         raise RuntimeError(f"Artefato não encontrado: {MODEL_PATH}")
+    # O carregamento acontece uma vez na inicialização, não a cada requisição.
     model_bundle = joblib.load(MODEL_PATH)
     required = {"model", "features", "last_closes", "last_observation_date"}
     if not required.issubset(model_bundle):
@@ -51,17 +52,20 @@ def predict_next_close(closes: list[float]) -> float:
         "close_lag_3": recent[-3],
         "close_mean_7": float(recent.mean()),
     }
+    # Mantenho a mesma ordem de colunas usada quando o modelo foi treinado.
     ordered = [[features[name] for name in model_bundle["features"]]]
     return float(model_bundle["model"].predict(ordered)[0])
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    # A rota também informa se o artefato foi carregado com sucesso.
     return {"status": "ok", "model_loaded": bool(model_bundle)}
 
 
 @app.get("/predict/latest")
 def predict_latest() -> dict[str, Any]:
+    # Os preços mais recentes vêm do artefato; a API não busca dados externos.
     if not model_bundle:
         raise HTTPException(status_code=503, detail="Modelo ainda não carregado.")
     prediction = predict_next_close(model_bundle["last_closes"])

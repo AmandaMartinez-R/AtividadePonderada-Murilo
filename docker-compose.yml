@@ -1,4 +1,5 @@
 services:
+  # Este serviço lê o CSV, treina e encerra depois de salvar os artefatos.
   trainer:
     build:
       context: .
@@ -10,6 +11,7 @@ services:
       - ./data:/data:ro
       - ./artifacts:/artifacts
 
+  # A API só inicia se o trainer terminar com sucesso.
   backend:
     build:
       context: .
@@ -21,8 +23,10 @@ services:
       MODEL_PATH: /artifacts/model.joblib
     ports:
       - "8000:8000"
+    # O modelo é compartilhado com o trainer, mas a API só pode ler.
     volumes:
       - ./artifacts:/artifacts:ro
+    # O Compose verifica a rota de saúde do serviço.
     healthcheck:
       test:
         - CMD

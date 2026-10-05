@@ -11,6 +11,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 
+# Features são as entradas; target é o valor que quero estimar para o dia atual.
 FEATURES = ["close_lag_1", "close_lag_2", "close_lag_3", "close_mean_7"]
 TARGET = "target_next_close"
 
@@ -37,6 +38,7 @@ def load_prices(csv_path: Path) -> pd.DataFrame:
     )
     prices["date"] = pd.to_datetime(prices["date"], errors="coerce", utc=True)
     prices["close"] = pd.to_numeric(prices["close"], errors="coerce")
+    # Ordeno por data, removo duplicatas e descarto fechamentos vazios ou inválidos.
     prices = prices.dropna().sort_values("date").drop_duplicates("date")
     prices = prices[prices["close"] > 0].reset_index(drop=True)
     if len(prices) < 20:
@@ -64,6 +66,7 @@ def make_features(prices: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_metrics(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
+    # MAE e RMSE medem o tamanho do erro; R² resume quanto da variação o modelo explica.
     return {
         "mae": float(mean_absolute_error(actual, predicted)),
         "rmse": float(np.sqrt(mean_squared_error(actual, predicted))),
@@ -108,6 +111,7 @@ def main() -> None:
         "last_closes": prices["close"].tail(7).astype(float).tolist(),
         "last_observation_date": prices["date"].iloc[-1].date().isoformat(),
     }
+    # Salvo o modelo separado das métricas para que o backend só carregue o bundle.
     joblib.dump(bundle, artifacts_dir / "model.joblib")
 
     metrics = {
@@ -127,6 +131,7 @@ def main() -> None:
         "model": model_metrics,
         "naive_baseline_close_lag_1": baseline_metrics,
     }
+    # Guardo os números do teste para comparar o modelo com a previsão ingênua.
     (artifacts_dir / "metrics.json").write_text(
         json.dumps(metrics, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
