@@ -1,0 +1,35 @@
+services:
+  trainer:
+    build:
+      context: .
+      dockerfile: trainer/Dockerfile
+    environment:
+      DATA_PATH: /data/btc_usd.csv
+      ARTIFACTS_DIR: /artifacts
+    volumes:
+      - ./data:/data:ro
+      - ./artifacts:/artifacts
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      trainer:
+        condition: service_completed_successfully
+    environment:
+      MODEL_PATH: /artifacts/model.joblib
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/artifacts:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
