@@ -161,15 +161,16 @@ Com apoio de IA, preparei o backend em Python com FastAPI, o cliente simples e o
 
 Registrei o código desta etapa no commit bfae6e2, “Adiciona API e Docker Compose”.
 
-- Build e inicialização dos containers: {...}
-- Resposta de /health: {...}
-- Requisição e resposta de /predict/latest: {...}
-- Execução do cliente: {...}
+- O Docker não estava disponível, então instalei as dependências da API na .venv e iniciei o backend localmente com `.venv/Scripts/python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8000`. O log confirmou que o modelo foi carregado de artifacts/model.joblib.
+- GET /health respondeu HTTP 200: `{"status":"ok","model_loaded":true}`.
+- GET /predict/latest respondeu HTTP 200: `{"currency":"BTC-USD","prediction":85619.84,"target":"next_day_close","model":"LinearRegression","based_on_date":"2026-10-05"}`.
+- Executei `.venv/Scripts/python.exe client/client.py`; o cliente consultou as duas rotas e imprimiu as respostas.
 
 ### Etapa 4: Execução
 
 - O comando `docker --version` não foi reconhecido neste ambiente, e não encontrei o executável do Docker Desktop no caminho usual.
-- Build do Compose, respostas da API e execução do cliente: {...}
+- Compilei os arquivos Python e validei a sintaxe YAML localmente. O Compose lista trainer e backend, com o backend esperando o trainer terminar com sucesso.
+- O build e a execução do Compose: {...}
 - Outros testes e resultados: {...}
 
 ### Fontes PlantUML
