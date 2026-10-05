@@ -1,0 +1,30 @@
+{
+  "currency": "BTC-USD",
+  "frequency": "daily",
+  "target": "next_day_close",
+  "features": [
+    "close_lag_1",
+    "close_lag_2",
+    "close_lag_3",
+    "close_mean_7"
+  ],
+  "algorithm": "LinearRegression",
+  "split": {
+    "method": "chronological",
+    "train_fraction": 0.8,
+    "train_rows": 1456,
+    "test_rows": 364,
+    "test_start": "2025-10-07",
+    "test_end": "2026-10-05"
+  },
+  "model": {
+    "mae": 1311.2562581642433,
+    "rmse": 1881.127782444111,
+    "r2": 0.9825846054939876
+  },
+  "naive_baseline_close_lag_1": {
+    "mae": 1302.659877232143,
+    "rmse": 1867.2392443830977,
+    "r2": 0.9828408150736064
+  }
+}

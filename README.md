@@ -26,7 +26,7 @@ O diagrama de sequência em docs/sequence.puml mostra essa ordem em mais detalhe
 ## 3. Modelo
 
 - **Moeda e frequência:** BTC-USD, dados diários.
-- **Fonte planejada:** Yahoo Finance, usando `yfinance`; o download configura os últimos cinco anos e salva `Date` e `Close` em CSV.
+- **Fonte usada:** Yahoo Finance, via `yfinance`; baixei cinco anos de dados diários e salvei as colunas `Date` e `Close` no CSV.
 - **Features:** fechamentos dos três dias anteriores (`close_lag_1`, `close_lag_2`, `close_lag_3`) e média dos sete fechamentos anteriores (`close_mean_7`).
 - **Alvo:** fechamento do próximo dia.
 - **Algoritmo:** `LinearRegression`.
@@ -34,6 +34,8 @@ O diagrama de sequência em docs/sequence.puml mostra essa ordem em mais detalhe
 - **Métricas:** MAE, RMSE e R²; comparação com o baseline “o próximo fechamento será igual ao último”.
 
 O treino salva as métricas em `artifacts/metrics.json`. O bundle em `artifacts/model.joblib` contém o estimador e os sete fechamentos mais recentes usados pela rota de previsão.
+
+No teste temporal, o modelo teve MAE de 1311.26, RMSE de 1881.13 e R² de 0.98258. O baseline teve MAE de 1302.66, RMSE de 1867.24 e R² de 0.98284. Nesse recorte, o baseline ingênuo ficou ligeiramente melhor; a meta principal continua sendo demonstrar o fluxo do artefato até a API.
 
 ## 4. Estrutura do projeto
 
@@ -57,8 +59,11 @@ O treino salva as métricas em `artifacts/metrics.json`. O bundle em `artifacts/
 │   ├── download_data.py
 │   ├── requirements.txt
 │   └── train.py
-├── data/       # CSV criado pelo download
-└── artifacts/  # modelo e métricas criados pelo treino
+├── data/
+│   └── btc_usd.csv
+└── artifacts/
+    ├── metrics.json
+    └── model.joblib
 ```
 
 ## 5. Como executar
@@ -66,18 +71,27 @@ O treino salva as métricas em `artifacts/metrics.json`. O bundle em `artifacts/
 ### Pré-requisitos
 
 - Docker com Docker Compose;
-- Python 3.11 para baixar os dados com o script local.
+- Python 3.11 ou mais recente para baixar os dados com o script local. Nesta execução usei Python 3.12.
 
 ### Baixar os dados
 
-Na pasta do repositório:
+Na pasta do repositório, criei um ambiente Python local e instalei as dependências:
 
 ```bash
-python -m pip install -r trainer/requirements.txt
-python trainer/download_data.py
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r trainer/requirements.txt
+.venv/Scripts/python.exe trainer/download_data.py
 ```
 
-O CSV será salvo em `data/btc_usd.csv`. O download precisa de conexão com a internet; o treinamento posterior usa o arquivo local.
+O CSV foi salvo em `data/btc_usd.csv`. Ele tem 1.827 observações, de 2021-10-05 a 2026-10-05. O download precisa de conexão com a internet; o treinamento posterior usa o arquivo local.
+
+### Treinar o modelo
+
+```bash
+.venv/Scripts/python.exe trainer/train.py
+```
+
+O treinamento local terminou com 1.456 linhas de treino e 364 linhas de teste. A separação foi cronológica, sem embaralhar os dados. Ele gerou `artifacts/model.joblib` e `artifacts/metrics.json`.
 
 ### Construir e iniciar
 
@@ -134,10 +148,12 @@ Com apoio de IA, preparei o downloader do BTC-USD e o código de treinamento. Es
 
 O trainer salva model.joblib e metrics.json. O artefato também leva os últimos sete preços e as informações que o backend precisa para prever. O código desta etapa ficou no commit a46e596, “Adiciona modelo de previsão”.
 
-- Dados usados: {...}
-- Comando de download e resultado: {...}
-- Comando de treinamento e resultado: {...}
-- Métricas do modelo e do baseline: {...}
+- Na primeira tentativa de pip install, o Windows bloqueou a conexão de rede com WinError 10013. Depois da liberação de rede, instalei as dependências na .venv do projeto.
+- Executei `.venv/Scripts/python.exe trainer/download_data.py`; o arquivo veio do Yahoo Finance e ficou com 1.827 observações diárias, de 2021-10-05 a 2026-10-05.
+- Executei `.venv/Scripts/python.exe trainer/train.py`; o corte ficou com 1.456 linhas de treino e 364 de teste.
+- Métricas reais: LinearRegression — MAE 1311.26, RMSE 1881.13, R² 0.98258. Baseline — MAE 1302.66, RMSE 1867.24, R² 0.98284.
+- Reabri o model.joblib com joblib, validei o JSON das métricas e rodei uma previsão direta pelo objeto salvo: 85619.84.
+- Neste recorte, o baseline teve erros um pouco menores que a regressão linear.
 
 ### Etapa 3: Deploy
 
@@ -152,7 +168,8 @@ Registrei o código desta etapa no commit bfae6e2, “Adiciona API e Docker Comp
 
 ### Etapa 4: Execução
 
-- Dificuldades e como resolvi: {...}
+- O comando `docker --version` não foi reconhecido neste ambiente, e não encontrei o executável do Docker Desktop no caminho usual.
+- Build do Compose, respostas da API e execução do cliente: {...}
 - Outros testes e resultados: {...}
 
 ### Fontes PlantUML
