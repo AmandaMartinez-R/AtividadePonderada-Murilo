@@ -4,80 +4,99 @@
 
 ## 1. Objetivo
 
-Demonstrar um fluxo simples de Machine Learning: dados históricos de BTC-USD, treinamento em um container, exportação do modelo e previsões por uma API Python em outro container.
+Esta seção apresenta o desafio e o objetivo da solução. A proposta é acompanhar um modelo desde os dados históricos até uma chamada de previsão feita por uma API.
+
+Este projeto mostra um fluxo simples de Machine Learning com dados históricos do BTC-USD. Um container treina o modelo e salva um artefato. Um segundo container carrega esse artefato e oferece previsões por uma API Python. A atividade é educacional: o foco está em entender a integração, não em fazer uma previsão financeira confiável.
 
 ## 2. Arquitetura e diagrama UML
 
+Esta seção apresenta a arquitetura da solução e explica o papel dos elementos que aparecem no desenho.
+
 ![Diagrama UML da arquitetura de treinamento e inferência](assets/architecture.png)
 
-Eu organizei o desenho em partes para ficar fácil de acompanhar o caminho dos dados e do modelo:
+### O que aparece no diagrama
 
-- BTC-USD diário é a entrada. O CSV tem a data e o preço de fechamento; o trainer lê essa cópia local.
-- O container tracejado “Treinamento” representa o serviço trainer. Dentro dele, train.py prepara as features, separa passado e futuro sem embaralhar as linhas, treina a regressão linear e calcula as métricas.
-- model.joblib é o artefato laranja gerado pelo trainer. Ele guarda o modelo treinado, a ordem das features e os sete fechamentos mais recentes. O backend usa esses valores para montar a previsão do próximo dia.
-- metrics.json também é gerado pelo treinamento e guarda as métricas do modelo e do baseline ingênuo.
-- O container tracejado “Inferência” representa o backend FastAPI. Ele monta a mesma pasta de artefatos em modo de leitura e carrega o modelo quando inicia. Não treina de novo.
-- O cliente é o script client.py ou um comando curl. Ele chama o backend por HTTP e recebe uma resposta JSON.
+- **BTC-USD diário**: representa os preços históricos do Bitcoin em dólares, organizados por dia. Neste projeto, os dados usados são os preços de fechamento.
+- **Arquivo `btc_usd.csv`**: é a cópia local dos dados históricos. O trainer lê esse arquivo para preparar os dados e treinar o modelo, sem precisar consultar a internet durante o treino.
+- **Container de treinamento (`trainer`)**: é o ambiente isolado que executa `train.py`. Ele lê o CSV, monta as features, separa treino e teste pela ordem do tempo, treina o modelo e calcula as métricas.
+- **Features de preço**: são os valores que entram no modelo. Aqui são os fechamentos dos três dias anteriores e a média dos sete fechamentos anteriores. Usar dias anteriores ajuda a estimar o próximo fechamento sem incluir informação do futuro.
+- **Modelo `LinearRegression`**: é o algoritmo de regressão linear que aprende uma relação entre as features históricas e o preço de fechamento do dia seguinte.
+- **Artefato `model.joblib`**: é o arquivo produzido pelo treinamento. Ele guarda o modelo ajustado e os dados recentes de que a API precisa para preparar uma previsão. O backend carrega esse arquivo, não treina novamente.
+- **Arquivo `metrics.json`**: guarda as métricas calculadas durante o treino, tanto para a regressão linear quanto para o baseline que considera o próximo fechamento igual ao último.
+- **Pasta compartilhada `artifacts/`**: é montada nos dois containers. O trainer grava `model.joblib` e `metrics.json` nela. O backend acessa a mesma pasta em modo de leitura. Assim, o artefato passa de um container para o outro sem ser incluído na imagem do backend.
+- **Container de inferência (`backend`)**: executa a aplicação FastAPI em Python. Quando inicia, procura e carrega `model.joblib`; depois fica disponível para receber chamadas HTTP.
+- **Rota `GET /health`**: permite verificar se a API está ativa e se o modelo foi carregado.
+- **Rota `GET /predict/latest`**: usa o modelo carregado e os preços recentes incluídos no artefato para estimar o fechamento do próximo dia.
+- **Cliente**: pode ser o script `client/client.py` ou um comando `curl`. Ele chama o backend por HTTP e recebe uma resposta JSON.
+- **Docker Compose**: coordena os containers e seus volumes. A configuração espera o trainer terminar com sucesso antes de iniciar o backend.
+- **Setas azuis**: mostram o fluxo dos dados e as chamadas HTTP entre cliente e API.
+- **Setas laranjas**: mostram a criação e a disponibilização dos artefatos do treinamento para a inferência.
 
-As setas azuis mostram o fluxo dos dados e as chamadas HTTP. As setas laranja mostram os arquivos criados no treinamento e o caminho do modelo até o backend. O Docker Compose espera o trainer terminar com sucesso antes de iniciar a API. Assim, o segundo container carrega o model.joblib gerado pelo primeiro.
+O fluxo completo é: o trainer lê o CSV, cria o modelo e salva os artefatos em `artifacts/`; o Compose espera o treinamento terminar; o backend carrega o mesmo `model.joblib`; por fim, o cliente chama a API e recebe a previsão.
 
-O diagrama de sequência em docs/sequence.puml mostra essa ordem em mais detalhe: primeiro o treinamento salva o arquivo, depois o backend carrega o modelo e, por fim, o cliente chama as rotas.
+### PlantUML e a imagem
 
-O professor Murilo recomendou descrever a arquitetura em detalhe e depois criar a imagem com apoio de IA. Para organizar esse desenho, o Codex sugeriu PlantUML. PlantUML é uma forma de descrever diagramas como texto; isso deixa o desenho fácil de revisar e versionar junto com o código. Aqui, deixei a descrição em docs/architecture.puml e a imagem aprovada em assets/architecture.png.
+Esta subseção explica como a fonte textual e a imagem se complementam. O professor Murilo recomendou descrever o diagrama em detalhe e depois criar a imagem com apoio de IA. Para organizar essa descrição, o Codex sugeriu PlantUML. PlantUML permite escrever diagramas como texto, o que facilita revisar e versionar a fonte junto com o projeto. A imagem foi revisada e aprovada antes de ser incluída.
 
-## 3. Modelo
+A fonte do diagrama arquitetural está em [`docs/architecture.puml`](docs/architecture.puml), e a imagem está em [`assets/architecture.png`](assets/architecture.png).
 
-- **Moeda e frequência:** BTC-USD, dados diários.
-- **Fonte usada:** Yahoo Finance, via `yfinance`; baixei cinco anos de dados diários e salvei as colunas `Date` e `Close` no CSV.
-- **Features:** fechamentos dos três dias anteriores (`close_lag_1`, `close_lag_2`, `close_lag_3`) e média dos sete fechamentos anteriores (`close_mean_7`).
-- **Alvo:** fechamento do próximo dia.
-- **Algoritmo:** `LinearRegression`.
-- **Separação:** cronológica; 80% inicial para treino e 20% final para teste, sem embaralhamento.
-- **Métricas:** MAE, RMSE e R²; comparação com o baseline “o próximo fechamento será igual ao último”.
+### Diagrama de sequência como complemento
 
-O treino salva as métricas em `artifacts/metrics.json`. O bundle em `artifacts/model.joblib` contém o estimador e os sete fechamentos mais recentes usados pela rota de previsão.
+Além do diagrama arquitetural pedido, incluí um diagrama de sequência para mostrar a ordem dos acontecimentos. Essa visão complementa a arquitetura: primeiro o Compose inicia o trainer; o trainer lê o CSV, prepara os dados e salva o modelo; após o encerramento bem-sucedido do treino, o backend carrega o artefato; então o cliente consulta `/health` e `/predict/latest`; por fim, a API chama o modelo e devolve a previsão em JSON.
 
-No teste temporal, o modelo teve MAE de 1311.26, RMSE de 1881.13 e R² de 0.98258. O baseline teve MAE de 1302.66, RMSE de 1867.24 e R² de 0.98284. Nesse recorte, o baseline ingênuo ficou ligeiramente melhor; a meta principal continua sendo demonstrar o fluxo do artefato até a API.
+O diagrama está em [`docs/sequence.puml`](docs/sequence.puml). Ele ajuda a explicar tanto como o artefato chega ao serviço quanto como uma requisição passa pelo backend. Essa documentação de sequência é um complemento que fui além do diagrama de arquitetura obrigatório.
 
-## 4. Estrutura do projeto
+## 3. Dados e modelo
 
-```text
-.
-├── README.md
-├── docker-compose.yml
-├── assets/
-│   └── architecture.png
-├── backend/
-│   ├── Dockerfile
-│   ├── app.py
-│   └── requirements.txt
-├── client/
-│   └── client.py
-├── docs/
-│   ├── architecture.puml
-│   └── sequence.puml
-├── trainer/
-│   ├── Dockerfile
-│   ├── download_data.py
-│   ├── requirements.txt
-│   └── train.py
-├── data/
-│   └── btc_usd.csv
-└── artifacts/
-    ├── metrics.json
-    └── model.joblib
+Esta seção resume a origem dos dados, as entradas do modelo e como avaliei o resultado respeitando a ordem temporal.
+
+- **Moeda e frequência**: BTC-USD, com observações diárias.
+- **Fonte**: Yahoo Finance, acessada com `yfinance`.
+- **Período usado nesta execução**: 2021-10-05 a 2026-10-05, com 1.827 observações.
+- **Colunas do CSV**: `Date` e `Close`.
+- **Features**: fechamentos dos três dias anteriores (`close_lag_1`, `close_lag_2`, `close_lag_3`) e média dos sete fechamentos anteriores (`close_mean_7`).
+- **Alvo**: preço de fechamento do próximo dia.
+- **Horizonte**: um dia à frente.
+- **Algoritmo**: `LinearRegression`.
+- **Separação treino e teste**: cronológica, com os primeiros 80% para treino e os 20% finais para teste, sem embaralhar as linhas.
+- **Métricas**: MAE, RMSE e R², comparadas com o baseline “o próximo fechamento será igual ao último”.
+
+Um lag é o valor observado em um período anterior. As features usam somente fechamentos anteriores, e o alvo é o próximo fechamento. As primeiras linhas ficam sem histórico completo para criar os lags e a média móvel, então são removidas antes do treino. O corte cronológico deixa o período mais recente para teste e evita misturar o futuro no treino.
+
+O treinamento salva `artifacts/model.joblib` e `artifacts/metrics.json`. Nesta execução, foram usadas 1.456 linhas de treino e 364 de teste. A regressão linear obteve MAE 1311.26, RMSE 1881.13 e R² 0.98258. O baseline obteve MAE 1302.66, RMSE 1867.24 e R² 0.98284. Neste recorte, o baseline ficou ligeiramente melhor. Mantive o modelo simples porque a atividade prioriza demonstrar o fluxo do artefato até a API.
+
+## 4. Deploy e API
+
+Esta seção explica como o artefato treinado chega ao backend e quais rotas o cliente pode consultar.
+
+O treinamento e a inferência ficam em containers separados. O serviço `trainer` gera o artefato na pasta compartilhada. Depois que ele termina com sucesso, o serviço `backend` inicia e carrega o modelo existente. A API não executa o treinamento.
+
+- **`GET /health`**: informa se o serviço está ativo e se o artefato foi carregado.
+- **`GET /predict/latest`**: retorna a estimativa do fechamento do próximo dia usando o modelo carregado.
+
+Esta foi uma resposta observada durante a execução:
+
+```json
+{
+  "currency": "BTC-USD",
+  "prediction": 85619.84,
+  "target": "next_day_close",
+  "model": "LinearRegression",
+  "based_on_date": "2026-10-05"
+}
 ```
 
-## 5. Como executar
+## 5. Como reproduzir
+
+Esta seção apresenta os comandos na ordem para preparar os dados, treinar o modelo, iniciar os containers e consultar a API.
 
 ### Pré-requisitos
 
-- Docker com Docker Compose;
-- Python 3.11 ou mais recente para baixar os dados com o script local. Nesta execução usei Python 3.12.
+Antes de começar, é necessário ter Docker Desktop com Docker Compose. Python 3.11 ou mais recente é necessário para baixar os dados e executar os scripts localmente. A conexão com a internet é necessária para baixar o CSV com `yfinance`.
 
 ### Baixar os dados
 
-Na pasta do repositório, criei um ambiente Python local e instalei as dependências:
+Na pasta do repositório, crie o ambiente Python e baixe os dados:
 
 ```bash
 python -m venv .venv
@@ -85,120 +104,185 @@ python -m venv .venv
 .venv/Scripts/python.exe trainer/download_data.py
 ```
 
-O CSV foi salvo em `data/btc_usd.csv`. Ele tem 1.827 observações, de 2021-10-05 a 2026-10-05. O download precisa de conexão com a internet; o treinamento posterior usa o arquivo local.
+O script salva o histórico em `data/btc_usd.csv`. O CSV tem 1.827 observações, de 2021-10-05 a 2026-10-05. Depois do download, o treinamento usa o arquivo local.
 
-### Treinar o modelo
+### Treinar localmente
+
+O treinamento pode ser executado fora do Docker para conferir a geração dos artefatos:
 
 ```bash
 .venv/Scripts/python.exe trainer/train.py
 ```
 
-O treinamento local terminou com 1.456 linhas de treino e 364 linhas de teste. A separação foi cronológica, sem embaralhar os dados. Ele gerou `artifacts/model.joblib` e `artifacts/metrics.json`.
+O comando gera `artifacts/model.joblib` e `artifacts/metrics.json`.
 
-### Construir e iniciar
+### Construir e iniciar os containers
+
+Com o Docker Desktop aberto, construa as imagens e inicie os serviços:
 
 ```bash
 docker compose build
 docker compose up
 ```
 
-O Compose inicia o `trainer`, que cria os artefatos. Após o treinamento concluir com sucesso, o `backend` inicia e disponibiliza a porta 8000. Deixe esse terminal aberto e use outro terminal para consultar a API.
+O Compose executa o trainer e, quando o treinamento termina com sucesso, inicia o backend na porta 8000. Para consultar a API, mantenha esse terminal aberto e use outro terminal.
 
 ### Health check e previsão
+
+Use `curl` para consultar as duas rotas:
 
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:8000/predict/latest
 ```
 
-No Windows, se `curl` apontar para o alias do PowerShell, use `curl.exe`.
+No Windows, use `curl.exe` caso `curl` aponte para o alias do PowerShell.
 
-### Cliente
+### Cliente e encerramento
 
-Com os containers ativos:
+Com os containers ativos, execute o cliente:
 
 ```bash
 python client/client.py
 ```
 
-Para encerrar:
+Para encerrar os serviços:
 
 ```bash
 docker compose down
 ```
 
-## 6. API
+## 6. Registro do desenvolvimento
 
-- `GET /health`: informa se o serviço está ativo e se o modelo foi carregado.
-- `GET /predict/latest`: prevê o fechamento do próximo dia com base nos últimos dados incluídos no artefato.
+Esta seção conta o processo em ordem cronológica. Registrei as decisões, os comandos e os resultados observados, além das dificuldades que realmente apareceram e de como foram resolvidas.
 
-## 7. Limitações
+### Etapa 1: entender a atividade e desenhar a arquitetura
 
-O modelo usa somente preços históricos e poucas features. Bitcoin é volátil; o resultado é experimental, tem finalidade educacional e não é recomendação de investimento.
+Comecei organizando o fluxo antes de implementar o modelo. A atividade pedia dados históricos, treinamento, artefato, backend em outro container, uma operação de previsão, uma forma de verificar o serviço e uma demonstração da integração. Por isso, desenhei primeiro os componentes e o caminho do arquivo treinado até o backend.
 
-## 8. Dev Log
+O professor Murilo recomendou descrever o diagrama em detalhe e depois criar a imagem com apoio de IA. O Codex sugeriu PlantUML para manter a fonte como texto, o que facilita revisar e versionar o desenho. A primeira prévia SVG não apareceu no chat. Para que fosse possível revisar a imagem, preparei uma versão PNG. Depois da aprovação, coloquei a imagem em `assets/architecture.png` e mantive os arquivos fonte em `docs/`.
 
-### Etapa 1: Diagrama
+Também preparei o diagrama de sequência como um complemento. Ele apresenta em ordem o treinamento, a geração do artefato, o carregamento no backend e a comunicação com o cliente. Assim, o diagrama de arquitetura explica os componentes e o de sequência explica quando cada parte atua.
 
-Comecei pelo diagrama para entender como os containers e o arquivo do modelo iam se conectar antes de seguir com o restante. O professor Murilo tinha recomendado escrever uma descrição detalhada e depois criar uma imagem com apoio de IA. O Codex sugeriu PlantUML para eu manter a descrição do desenho em texto e facilitar as revisões. Com apoio de IA, montei uma primeira versão da imagem e dos arquivos PlantUML. A prévia SVG não apareceu no chat, então gerei uma versão PNG para revisar. Depois da aprovação, coloquei a imagem em assets/architecture.png e deixei os fontes em docs/.
+### Etapa 2: preparar os dados
 
-O desenho mostra o CSV chegando ao trainer, o trainer gerando o modelo e as métricas, e o backend carregando o mesmo modelo pelo volume compartilhado. Também mostra o cliente chamando a API por HTTP. Registrei essa etapa no commit 637b5d9, “Adiciona diagrama UML”. O histórico local estava vazio e a referência origin/main não estava disponível, então mantive os commits no repositório local, sem push.
+Escolhi BTC-USD diário e a fonte Yahoo Finance por meio de `yfinance`. Criei um ambiente virtual Python e instalei as dependências necessárias. Na primeira tentativa de instalação, o Windows bloqueou a conexão de rede com WinError 10013. Depois que a conexão foi liberada, a instalação e o download funcionaram.
 
-### Etapa 2: Modelo
+Executei:
 
-Com apoio de IA, preparei o downloader do BTC-USD e o código de treinamento. Escolhi LinearRegression e features com os fechamentos anteriores: três lags e a média dos sete últimos fechamentos. Também deixei comentários curtos explicando as features, a separação temporal e o baseline. O código separa treino e teste em ordem cronológica e calcula MAE, RMSE e R², além de comparar com o baseline “amanhã igual a hoje”.
+```bash
+.venv/Scripts/python.exe trainer/download_data.py
+```
 
-O trainer salva model.joblib e metrics.json. O artefato também leva os últimos sete preços e as informações que o backend precisa para prever. O código desta etapa ficou no commit a46e596, “Adiciona modelo de previsão”.
+O script salvou `data/btc_usd.csv` com as colunas `Date` e `Close`. O arquivo ficou com 1.827 observações, de 2021-10-05 a 2026-10-05. Depois desse download, o treinamento passou a usar o CSV local.
 
-- Na primeira tentativa de pip install, o Windows bloqueou a conexão de rede com WinError 10013. Depois da liberação de rede, instalei as dependências na .venv do projeto.
-- Executei `.venv/Scripts/python.exe trainer/download_data.py`; o arquivo veio do Yahoo Finance e ficou com 1.827 observações diárias, de 2021-10-05 a 2026-10-05.
-- Executei `.venv/Scripts/python.exe trainer/train.py`; o corte ficou com 1.456 linhas de treino e 364 de teste.
-- Métricas reais: LinearRegression - MAE 1311.26, RMSE 1881.13, R² 0.98258. Baseline - MAE 1302.66, RMSE 1867.24, R² 0.98284.
-- Reabri o model.joblib com joblib, validei o JSON das métricas e rodei uma previsão direta pelo objeto salvo: 85619.84.
-- Neste recorte, o baseline teve erros um pouco menores que a regressão linear.
-- Commitei o CSV, o artefato e as métricas no commit c52be98, “Registra dados e métricas do treino”.
+### Etapa 3: preparar features e treinar o modelo
 
-### Etapa 3: Deploy
+Usei três fechamentos anteriores e a média dos últimos sete fechamentos como features. A variável alvo é o fechamento do próximo dia. O código remove as linhas iniciais que não têm histórico suficiente para calcular todas as features.
 
-Com apoio de IA, preparei o backend em Python com FastAPI, o cliente simples e o Docker Compose. O backend carrega o artefato ao iniciar e tem as rotas /health e /predict/latest. No Compose, os dois serviços compartilham a pasta artifacts: o trainer grava nela e o backend monta em modo de leitura. Também configurei a API para iniciar depois que o trainer terminar com sucesso. Deixei comentários nos pontos principais do backend, cliente, Dockerfiles e Compose para explicar essa ligação.
+Executei:
 
-Registrei o código desta etapa no commit bfae6e2, “Adiciona API e Docker Compose”.
+```bash
+.venv/Scripts/python.exe trainer/train.py
+```
 
-- O Docker não estava disponível, então instalei as dependências da API na .venv e iniciei o backend localmente com `.venv/Scripts/python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8000`. O log confirmou que o modelo foi carregado de artifacts/model.joblib.
-- Instalei as dependências do backend com `.venv/Scripts/python.exe -m pip install -r backend/requirements.txt`.
-- GET /health respondeu HTTP 200: `{"status":"ok","model_loaded":true}`.
-- GET /predict/latest respondeu HTTP 200: `{"currency":"BTC-USD","prediction":85619.84,"target":"next_day_close","model":"LinearRegression","based_on_date":"2026-10-05"}`.
-- Executei `.venv/Scripts/python.exe client/client.py`; o cliente consultou as duas rotas e imprimiu as respostas.
-- Registrei essas verificações locais no commit 808a5c2, “Registra teste local da API”.
+O código separou os dados em ordem cronológica, sem embaralhamento: 1.456 linhas para treino e 364 para teste. Treinei `LinearRegression`, calculei MAE, RMSE e R², e comparei os resultados com o baseline “amanhã será igual a hoje”.
 
-### Etapa 4: Execução
+A regressão linear obteve MAE 1311.26, RMSE 1881.13 e R² 0.98258. O baseline teve MAE 1302.66, RMSE 1867.24 e R² 0.98284. Nesse conjunto de teste, o baseline ficou um pouco melhor. Não tentei sofisticar o modelo porque a atividade prioriza demonstrar o fluxo entre o modelo, o artefato e o backend.
 
-Na primeira tentativa, o comando docker não estava no PATH. Encontrei o Docker Desktop instalado em LOCALAPPDATA, abri o app e usei o CLI pelo caminho da instalação. A versão retornada foi Docker 29.7.2 e a do Compose foi 5.5.0.
+O trainer gerou `artifacts/model.joblib` e `artifacts/metrics.json`. Reabri o arquivo com `joblib`, conferi o JSON das métricas e fiz uma previsão de verificação usando o modelo salvo. Essa chamada retornou 85619.84.
 
-- Executei `docker compose build`: as imagens atividadeponderada-murilo-trainer e atividadeponderada-murilo-backend foram construídas.
-- Para conferir a reprodução limpa, executei `docker compose down`, `docker compose build --no-cache` e `docker compose up -d`. As duas imagens foram reconstruídas sem erro.
-- O trainer terminou com código 0, treinou com 1.456 linhas e avaliou com 364. O log confirmou que gravou artifacts/model.joblib.
-- O backend ficou healthy e carregou o modelo de /artifacts/model.joblib. A porta publicada foi 8000.
-- Confirmei os mounts: data aparece como leitura no trainer; artifacts é escrita pelo trainer e leitura pelo backend.
-- GET /health retornou HTTP 200: `{"status":"ok","model_loaded":true}`.
-- GET /predict/latest retornou HTTP 200: `{"currency":"BTC-USD","prediction":85619.84,"target":"next_day_close","model":"LinearRegression","based_on_date":"2026-10-05"}`.
-- Executei client.py contra a API nos containers; ele recebeu as respostas das duas rotas.
-- Também compilei os arquivos Python e validei a sintaxe YAML. O backend espera o trainer terminar com sucesso antes de iniciar.
-- Deixei o backend rodando no Docker Desktop para a demonstração.
+### Etapa 4: implementar a inferência e testar localmente
 
-### Como entendi os Dockerfiles e o Compose
+Com apoio do Codex para estruturar código padrão, preparei o backend FastAPI em Python e o script cliente. O backend carrega o modelo ao iniciar e oferece `/health` e `/predict/latest`. O cliente chama as duas rotas e imprime as respostas.
 
-Nos Dockerfiles, FROM escolhe a imagem base com Python 3.11. WORKDIR define a pasta de trabalho. COPY leva requirements e código para a imagem, RUN instala as bibliotecas, CMD define o processo que inicia no container e EXPOSE informa a porta usada pela API. A imagem é o pacote criado no build; o container é a execução dessa imagem.
+Antes de usar Docker, executei o backend localmente com Uvicorn:
 
-No Compose, services lista trainer e backend, build aponta para cada Dockerfile e ports publica a porta 8000 do backend. O volume artifacts permite que o trainer entregue o model.joblib ao backend sem copiar o arquivo para dentro da imagem. O depends_on com service_completed_successfully espera o treino acabar sem erro. O healthcheck consulta /health para verificar o serviço.
+```bash
+.venv/Scripts/python.exe -m uvicorn backend.app:app --host 127.0.0.1 --port 8000
+```
+
+O log confirmou que o backend carregou `artifacts/model.joblib`. `/health` respondeu HTTP 200 com `{"status":"ok","model_loaded":true}`. `/predict/latest` também respondeu HTTP 200 com a previsão e os metadados. Executei o cliente localmente e ele consultou as duas rotas.
+
+### Etapa 5: containerizar e compartilhar o artefato
+
+Preparei os Dockerfiles e o Docker Compose para executar trainer e backend em containers separados. O volume `artifacts/` permite ao trainer escrever o modelo e ao backend ler o mesmo arquivo. O backend espera o trainer terminar com sucesso antes de iniciar.
+
+Na primeira tentativa, o comando `docker` não estava no PATH. Encontrei o Docker Desktop instalado em `LOCALAPPDATA`, abri o aplicativo e usei o CLI pelo caminho da instalação. As versões observadas foram Docker 29.7.2 e Docker Compose 5.5.0.
+
+Executei `docker compose build` e as imagens foram construídas. Em seguida, conferi uma reconstrução limpa com:
+
+```bash
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+O trainer terminou com código 0 e gravou os artefatos. O backend ficou saudável e os logs confirmaram o carregamento de `/artifacts/model.joblib`. Conferi que o trainer lê `data/` e grava em `artifacts/`, enquanto o backend lê `artifacts/`. A porta publicada foi 8000.
+
+### Etapa 6: testar a integração ponta a ponta
+
+Com os containers ativos, consultei `/health` e `/predict/latest`. As duas chamadas retornaram HTTP 200. A previsão observada foi 85619.84, para BTC-USD, com base nos dados até 2026-10-05. Executei também `client.py` contra o backend nos containers, e o cliente recebeu as respostas das duas rotas.
+
+Compilei os arquivos Python e validei a sintaxe YAML do Compose. O backend foi deixado rodando no Docker Desktop para a demonstração.
+
+### O que entendi dos Dockerfiles e do Compose
+
+Esta parte registra como interpretei as instruções usadas para montar e iniciar os containers. Nos Dockerfiles, `FROM` escolhe a imagem base com Python 3.11; `WORKDIR` define a pasta de trabalho; `COPY` leva os arquivos necessários para a imagem; `RUN` instala as dependências; `CMD` define o processo que inicia no container; e `EXPOSE` documenta a porta usada pela API. A imagem é o pacote construído; o container é a execução desse pacote.
+
+No Compose, `services` lista trainer e backend; `build` aponta para cada Dockerfile; `ports` publica a porta 8000; e `volumes` compartilha a pasta dos artefatos. `depends_on` com `service_completed_successfully` faz o backend esperar o treinamento terminar sem erro. O `healthcheck` consulta `/health`. O volume permite que um container grave o modelo e o outro carregue o mesmo arquivo.
 
 ### Relação com MLOps
 
-Esse projeto não é uma plataforma completa de MLOps. Ele mostra algumas partes do ciclo: dados locais, treinamento separado da inferência, dependências definidas, artefato persistido, containers e modelo oferecido por uma API. Com o mesmo CSV e as mesmas dependências, dá para repetir o treino; depois, o backend usa o artefato sem treinar de novo.
+Esta atividade mostra partes de um ciclo de operacionalização de Machine Learning, sem ser uma plataforma completa de MLOps. Os dados são mantidos localmente; o treinamento e a inferência têm responsabilidades separadas; as dependências e os ambientes estão definidos; o artefato é persistido; e o modelo é disponibilizado por um serviço.
 
-### Fontes PlantUML
+## 7. Limitações
 
-- [Diagrama de arquitetura](docs/architecture.puml)
+Esta seção registra os limites que precisam ser lembrados ao interpretar os resultados. Bitcoin tem alta volatilidade, e o modelo usa somente preços históricos e poucas features. Ele não considera fatores externos. As previsões são experimentais, têm finalidade educacional e não são recomendação de investimento.
+
+## 8. Estrutura e documentação
+
+Esta seção ajuda a localizar os arquivos do projeto e os diagramas que complementam a explicação.
+
+```text
+.
+├── README.md
+├── docker-compose.yml
+├── .dockerignore
+├── .gitignore
+├── assets/
+│   └── architecture.png
+├── artifacts/
+│   ├── metrics.json
+│   └── model.joblib
+├── backend/
+│   ├── Dockerfile
+│   ├── app.py
+│   └── requirements.txt
+├── client/
+│   └── client.py
+├── data/
+│   └── btc_usd.csv
+├── docs/
+│   ├── architecture.puml
+│   └── sequence.puml
+└── trainer/
+    ├── Dockerfile
+    ├── download_data.py
+    ├── requirements.txt
+    └── train.py
+```
+
+- [Fonte do diagrama de arquitetura](docs/architecture.puml)
 - [Diagrama de sequência](docs/sequence.puml)
+- [Imagem do diagrama](assets/architecture.png)
 
-O código inicial e os diagramas tiveram apoio de IA. As métricas, respostas e evidências ficam registradas conforme os resultados observados.
+O diagrama, a estrutura inicial do repositório e trechos padrão de código tiveram apoio do Codex. Os comandos, métricas, respostas e dificuldades descritos neste README correspondem às execuções registradas durante o desenvolvimento.
+
+## 9. Conclusão
+
+Para mim, o ponto mais importante desta ponderada foi perceber que o modelo não termina quando o treinamento acaba. Para ele ser usado, também precisei pensar em como salvar o artefato, disponibilizá-lo para outro container e criar uma forma simples de solicitar uma previsão.
+
+O processo teve alguns obstáculos práticos, como a instalação bloqueada pela rede, a prévia do diagrama que não apareceu e o Docker que não estava no PATH. Resolver essas situações deixou mais claro o caminho entre os componentes. O baseline ter ficado um pouco melhor também foi útil: mostrou que um resultado de regressão alto não deve ser interpretado sozinho nem significa que a previsão seja confiável.
+
+No fim, fiquei com uma solução pequena que consigo explicar por partes: dados, features, treino, artefato, backend, cliente e containers. O diagrama arquitetural mostra quem participa; o diagrama de sequência mostra em que ordem as coisas acontecem. Essa combinação deixou mais fácil entender e apresentar o fluxo da atividade.
