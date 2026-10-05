@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1370" viewBox="0 0 1240 1370" role="img" aria-labelledby="title description">
+  <title id="title">Diagrama UML de sequência da previsão BTC-USD</title>
+  <desc id="description">O Docker Compose executa o treinamento, o backend carrega o artefato e o cliente consulta a API para receber uma previsão.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#355c7d" />
+    </marker>
+    <marker id="returnArrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,4 L0,8 z" fill="#6b7280" />
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #243247; }
+      .title { font-size: 25px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #59677a; }
+      .head { fill: #f0f5fa; stroke: #355c7d; stroke-width: 2; rx: 10; }
+      .headText { font-size: 15px; font-weight: 600; text-anchor: middle; }
+      .life { stroke: #9aa8b8; stroke-width: 2; stroke-dasharray: 7 7; }
+      .group { fill: #f7f9fc; stroke: #cbd5e1; stroke-width: 1.5; rx: 12; }
+      .groupLabel { font-size: 16px; font-weight: 700; fill: #355c7d; }
+      .call { stroke: #355c7d; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+      .reply { stroke: #6b7280; stroke-width: 2.1; stroke-dasharray: 7 5; fill: none; marker-end: url(#returnArrow); }
+      .message { font-size: 14px; }
+      .activation { fill: #dce9f4; stroke: #6d8eaa; stroke-width: 1.4; rx: 4; }
+      .note { fill: #fff8e7; stroke: #e4bf64; stroke-width: 1.3; rx: 8; }
+      .noteText { font-size: 13px; fill: #6b551b; }
+    </style>
+  </defs>
+
+  <rect width="1240" height="1370" fill="#ffffff" />
+  <text x="620" y="38" class="title" text-anchor="middle">Sequência: treinamento e pedido de previsão</text>
+  <text x="620" y="63" class="subtitle" text-anchor="middle">BTC-USD: do CSV ao JSON retornado pela API</text>
+
+  <!-- Participantes da sequência -->
+  <g>
+    <rect x="35" y="82" width="150" height="62" class="head" />
+    <text x="110" y="119" class="headText">Cliente</text>
+    <rect x="240" y="82" width="150" height="62" class="head" />
+    <text x="315" y="108" class="headText"><tspan x="315">Docker</tspan><tspan x="315" dy="19">Compose</tspan></text>
+    <rect x="445" y="82" width="150" height="62" class="head" />
+    <text x="520" y="108" class="headText"><tspan x="520">Container</tspan><tspan x="520" dy="19">trainer</tspan></text>
+    <rect x="650" y="82" width="150" height="62" class="head" />
+    <text x="725" y="108" class="headText"><tspan x="725">Artefato</tspan><tspan x="725" dy="19">model.joblib</tspan></text>
+    <rect x="855" y="82" width="150" height="62" class="head" />
+    <text x="930" y="108" class="headText"><tspan x="930">Backend</tspan><tspan x="930" dy="19">FastAPI</tspan></text>
+    <rect x="1060" y="82" width="150" height="62" class="head" />
+    <text x="1135" y="108" class="headText"><tspan x="1135">Modelo</tspan><tspan x="1135" dy="19">carregado</tspan></text>
+  </g>
+
+  <g class="life">
+    <line x1="110" y1="144" x2="110" y2="1305" />
+    <line x1="315" y1="144" x2="315" y2="1305" />
+    <line x1="520" y1="144" x2="520" y2="1305" />
+    <line x1="725" y1="144" x2="725" y2="1305" />
+    <line x1="930" y1="144" x2="930" y2="1305" />
+    <line x1="1135" y1="144" x2="1135" y2="1305" />
+  </g>
+
+  <!-- Parte 1: treinamento e gravação do artefato -->
+  <rect x="22" y="165" width="1196" height="310" class="group" />
+  <text x="44" y="193" class="groupLabel">1. Geração do artefato</text>
+  <rect x="305" y="214" width="20" height="232" class="activation" />
+  <rect x="510" y="238" width="20" height="179" class="activation" />
+  <path d="M315 228 L520 228" class="call" />
+  <text x="418" y="218" class="message" text-anchor="middle">inicia o trainer</text>
+  <path d="M520 270 L566 270 L566 302 L520 302" class="call" />
+  <text x="576" y="282" class="message">lê CSV e cria features</text>
+  <path d="M520 330 L566 330 L566 362 L520 362" class="call" />
+  <text x="576" y="342" class="message">separa treino e teste</text>
+  <path d="M520 388 L566 388 L566 420 L520 420" class="call" />
+  <text x="576" y="400" class="message">treina e calcula métricas</text>
+  <path d="M520 438 L725 438" class="call" />
+  <text x="622" y="428" class="message" text-anchor="middle">grava model.joblib</text>
+  <path d="M520 458 L315 458" class="reply" />
+  <text x="418" y="450" class="message" text-anchor="middle">treino terminou com sucesso</text>
+
+  <!-- Parte 2: backend lê o artefato pronto -->
+  <rect x="22" y="495" width="1196" height="300" class="group" />
+  <text x="44" y="523" class="groupLabel">2. Inicialização da inferência</text>
+  <rect x="305" y="548" width="20" height="48" class="activation" />
+  <rect x="920" y="565" width="20" height="195" class="activation" />
+  <path d="M315 563 L930 563" class="call" />
+  <text x="622" y="553" class="message" text-anchor="middle">inicia após o treino terminar</text>
+  <path d="M930 614 L725 614" class="call" />
+  <text x="828" y="604" class="message" text-anchor="middle">lê pelo volume compartilhado</text>
+  <path d="M725 654 L930 654" class="reply" />
+  <text x="828" y="644" class="message" text-anchor="middle">modelo e dados recentes</text>
+  <path d="M930 704 L1135 704" class="call" />
+  <text x="1032" y="694" class="message" text-anchor="middle">mantém modelo carregado</text>
+  <rect x="1035" y="716" width="200" height="56" class="note" />
+  <text x="1047" y="738" class="noteText"><tspan x="1047">A API usa o modelo pronto.</tspan><tspan x="1047" dy="18">Ela não faz outro treinamento.</tspan></text>
+
+  <!-- Parte 3: health check e previsão -->
+  <rect x="22" y="815" width="1196" height="475" class="group" />
+  <text x="44" y="843" class="groupLabel">3. Requisição do cliente</text>
+  <rect x="920" y="875" width="20" height="345" class="activation" />
+  <rect x="1125" y="1055" width="20" height="72" class="activation" />
+  <path d="M110 895 L930 895" class="call" />
+  <text x="520" y="885" class="message" text-anchor="middle">GET /health</text>
+  <path d="M930 941 L110 941" class="reply" />
+  <text x="520" y="931" class="message" text-anchor="middle">200: serviço ativo e modelo carregado</text>
+  <path d="M110 987 L930 987" class="call" />
+  <text x="520" y="977" class="message" text-anchor="middle">GET /predict/latest</text>
+  <path d="M930 1042 L1135 1042" class="call" />
+  <text x="1032" y="1032" class="message" text-anchor="middle">predict com os dados recentes</text>
+  <path d="M1135 1094 L930 1094" class="reply" />
+  <text x="1032" y="1084" class="message" text-anchor="middle">preço estimado para amanhã</text>
+  <path d="M930 1160 L110 1160" class="reply" />
+  <text x="520" y="1150" class="message" text-anchor="middle">200: resposta JSON com a previsão</text>
+  <rect x="350" y="1200" width="520" height="58" class="note" />
+  <text x="370" y="1224" class="noteText"><tspan x="370">O cliente conversa com o backend por HTTP.</tspan><tspan x="370" dy="18">O modelo retorna somente a estimativa aprendida no treino.</tspan></text>
+
+  <text x="620" y="1340" class="subtitle" text-anchor="middle">Treinamento e inferência são etapas separadas; o arquivo model.joblib faz a ligação.</text>
+</svg>
