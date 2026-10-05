@@ -10,7 +10,18 @@ Demonstrar um fluxo simples de Machine Learning: dados históricos de BTC-USD, t
 
 ![Diagrama UML da arquitetura de treinamento e inferência](assets/architecture.png)
 
-O serviço `trainer` lê `data/btc_usd.csv`, prepara as features, treina o modelo e grava `artifacts/model.joblib` e `artifacts/metrics.json`. O serviço `backend` só inicia depois que o treinamento termina com sucesso. Ele monta `artifacts/` em modo de leitura e carrega o modelo ao iniciar. O cliente acessa a API por HTTP.
+Eu organizei o desenho em partes para ficar fácil de acompanhar o caminho dos dados e do modelo:
+
+- BTC-USD diário é a entrada. O CSV tem a data e o preço de fechamento; o trainer lê essa cópia local.
+- O container tracejado “Treinamento” representa o serviço trainer. Dentro dele, train.py prepara as features, separa passado e futuro sem embaralhar as linhas, treina a regressão linear e calcula as métricas.
+- model.joblib é o artefato laranja gerado pelo trainer. Ele guarda o modelo treinado, a ordem das features e os sete fechamentos mais recentes. O backend usa esses valores para montar a previsão do próximo dia.
+- metrics.json também é gerado pelo treinamento e guarda as métricas do modelo e do baseline ingênuo.
+- O container tracejado “Inferência” representa o backend FastAPI. Ele monta a mesma pasta de artefatos em modo de leitura e carrega o modelo quando inicia. Não treina de novo.
+- O cliente é o script client.py ou um comando curl. Ele chama o backend por HTTP e recebe uma resposta JSON.
+
+As setas azuis mostram o fluxo dos dados e as chamadas HTTP. As setas laranja mostram os arquivos criados no treinamento e o caminho do modelo até o backend. O Docker Compose espera o trainer terminar com sucesso antes de iniciar a API. Assim, o segundo container carrega o model.joblib gerado pelo primeiro.
+
+O diagrama de sequência em docs/sequence.puml mostra essa ordem em mais detalhe: primeiro o treinamento salva o arquivo, depois o backend carrega o modelo e, por fim, o cliente chama as rotas.
 
 ## 3. Modelo
 
@@ -109,13 +120,44 @@ docker compose down
 
 O modelo usa somente preços históricos e poucas features. Bitcoin é volátil; o resultado é experimental, tem finalidade educacional e não é recomendação de investimento.
 
-## 8. Documentação e Dev Log
+## 8. Dev Log
 
-- [Diagrama UML em PlantUML](docs/architecture.puml)
-- [Diagrama de sequência em PlantUML](docs/sequence.puml)
+### Etapa 1: Diagrama
 
-Registre no Dev Log, durante a execução, suas decisões, comandos realmente usados, resultados, dificuldades e correções. Inclua as métricas e as respostas HTTP observadas. Registre também que a preparação inicial do código teve apoio de IA. Não registre como executado o que ainda não foi feito.
+Comecei pelo diagrama para entender como os containers e o arquivo do modelo iam se conectar antes de seguir com o restante. Com apoio de IA, montei uma primeira versão da imagem e dos arquivos PlantUML. A prévia SVG não apareceu no chat, então gerei uma versão PNG para revisar. Depois da aprovação, coloquei a imagem em assets/architecture.png e deixei os fontes em docs/.
 
-## 9. Estado atual
+O desenho mostra o CSV chegando ao trainer, o trainer gerando o modelo e as métricas, e o backend carregando o mesmo modelo pelo volume compartilhado. Também mostra o cliente chamando a API por HTTP. Registrei essa etapa no commit 637b5d9, “Adiciona diagrama UML”. O histórico local estava vazio e a referência origin/main não estava disponível, então mantive os commits no repositório local, sem push.
 
-Os arquivos de código, a arquitetura e as instruções de reprodução estão preparados. O download do CSV, o treinamento, a geração dos artefatos e os testes dos containers ainda precisam ser executados; portanto, ainda não há métricas ou respostas reais da API para registrar.
+### Etapa 2: Modelo
+
+Com apoio de IA, preparei o downloader do BTC-USD e o código de treinamento. Escolhi LinearRegression e features com os fechamentos anteriores: três lags e a média dos sete últimos fechamentos. O código separa treino e teste em ordem cronológica e calcula MAE, RMSE e R², além de comparar com o baseline “amanhã igual a hoje”.
+
+O trainer salva model.joblib e metrics.json. O artefato também leva os últimos sete preços e as informações que o backend precisa para prever. O código desta etapa ficou no commit a46e596, “Adiciona modelo de previsão”.
+
+- Dados usados: {...}
+- Comando de download e resultado: {...}
+- Comando de treinamento e resultado: {...}
+- Métricas do modelo e do baseline: {...}
+
+### Etapa 3: Deploy
+
+Com apoio de IA, preparei o backend em Python com FastAPI, o cliente simples e o Docker Compose. O backend carrega o artefato ao iniciar e tem as rotas /health e /predict/latest. No Compose, os dois serviços compartilham a pasta artifacts: o trainer grava nela e o backend monta em modo de leitura. Também configurei a API para iniciar depois que o trainer terminar com sucesso.
+
+Registrei o código desta etapa no commit bfae6e2, “Adiciona API e Docker Compose”.
+
+- Build e inicialização dos containers: {...}
+- Resposta de /health: {...}
+- Requisição e resposta de /predict/latest: {...}
+- Execução do cliente: {...}
+
+### Etapa 4: Execução
+
+- Dificuldades e como resolvi: {...}
+- Outros testes e resultados: {...}
+
+### Fontes PlantUML
+
+- [Diagrama de arquitetura](docs/architecture.puml)
+- [Diagrama de sequência](docs/sequence.puml)
+
+O código inicial e os diagramas tiveram apoio de IA. As métricas, respostas e evidências ficam registradas conforme os resultados observados.
