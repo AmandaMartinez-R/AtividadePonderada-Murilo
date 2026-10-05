@@ -1,0 +1,30 @@
+@startuml
+title Sequência — inicialização e solicitação de previsão
+actor Cliente
+participant "Docker Compose" as compose
+participant "trainer container" as trainer
+database "artifacts/model.joblib" as artifact
+participant "FastAPI backend" as backend
+participant "LinearRegression carregada" as model
+
+== Geração do artefato ==
+compose -> trainer : inicia serviço trainer
+trainer -> trainer : lê CSV, cria features e split temporal
+trainer -> trainer : ajusta modelo e calcula métricas
+trainer -> artifact : grava bundle via joblib
+trainer --> compose : encerra com sucesso
+
+== Inicialização da inferência ==
+compose -> backend : inicia após trainer concluir
+backend -> artifact : lê artefato pelo volume compartilhado
+artifact --> backend : modelo + histórico recente + metadados
+backend -> model : mantém estimador carregado
+
+== Requisição ==
+Cliente -> backend : GET /health
+backend --> Cliente : 200 {status, model_loaded}
+Cliente -> backend : GET /predict/latest
+backend -> model : predict(features dos últimos 7 fechamentos)
+model --> backend : fechamento previsto para o próximo dia
+backend --> Cliente : 200 JSON com previsão
+@enduml

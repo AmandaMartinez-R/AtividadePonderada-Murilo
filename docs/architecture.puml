@@ -1,0 +1,28 @@
+@startuml
+title Arquitetura — previsão experimental de fechamento diário BTC-USD
+left to right direction
+skinparam componentStyle rectangle
+
+database "data/btc_usd.csv\nBTC-USD diário\nDate, Close" as csv
+node "Container de treinamento\nPython 3.11 + pandas + scikit-learn" as trainer {
+  component "train.py\nfeatures + split temporal\nLinearRegression + métricas" as train
+}
+artifact "artifacts/model.joblib\nmodelo + features +\núltimos 7 fechamentos" as model
+artifact "artifacts/metrics.json\nMAE, RMSE, R²\ne baseline ingênuo" as metrics
+node "Container de inferência\nPython 3.11 + FastAPI" as backend {
+  component "app.py\ncarrega artefato ao iniciar\nGET /health\nGET /predict/latest" as api
+}
+actor "Aplicação cliente\nclient.py / curl" as client
+
+csv --> train : dados históricos
+train --> model : serializa com joblib
+train --> metrics : registra avaliação
+model --> api : bind mount /artifacts\nleitura do modelo treinado
+client --> api : HTTP
+api --> client : JSON da predição
+
+note bottom of model
+  O backend apenas carrega e usa o estimador.
+  O treinamento ocorre no serviço trainer.
+end note
+@enduml
